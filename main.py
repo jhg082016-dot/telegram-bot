@@ -15,10 +15,13 @@ import string
 from datetime import datetime
 from telebot import TeleBot, types
 
-     BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-     if not BOT_TOKEN:
-         print("Ошибка: TELEGRAM_BOT_TOKEN не задан!")
-         exit(1)
+# ===== ТОКЕН ИЗ ПЕРЕМЕННОЙ ОКРУЖЕНИЯ =====
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not BOT_TOKEN:
+    print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не задан!")
+    print("Установи переменную окружения TELEGRAM_BOT_TOKEN")
+    sys.exit(1)
+
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -62,7 +65,10 @@ def info_cmd(msg):
     info["Machine"] = platform.machine()
     info["Processor"] = platform.processor()
     info["Hostname"] = socket.gethostname()
-    info["IP"] = socket.gethostbyname(socket.gethostname())
+    try:
+        info["IP"] = socket.gethostbyname(socket.gethostname())
+    except:
+        info["IP"] = "не определен"
     info["CPU_count"] = psutil.cpu_count()
     info["CPU_percent"] = psutil.cpu_percent(interval=0.5)
     info["RAM_total"] = round(psutil.virtual_memory().total / (1024**3), 2)
