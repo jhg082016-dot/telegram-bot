@@ -16,7 +16,7 @@ import string
 from datetime import datetime
 from telebot import TeleBot, types
 
-BOT_TOKEN = "ВАШ_ТОКЕН_ОТ_BOTFATHER"  # замени на свой
+BOT_TOKEN = "8785806558:AAHcD86MQ6miDRtouj28XeeBJh7VRW4Yzio"  # замени на свой
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
