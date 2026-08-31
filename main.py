@@ -1,230 +1,282 @@
-import os, sys, subprocess, platform, psutil, shutil, time, threading, socket, getpass, requests, json, paramiko, random, string
+import os
+import sys
+import subprocess
+import platform
+import psutil
+import shutil
+import time
+import threading
+import socket
+import getpass
+import requests
+import json
+import paramiko
+import random
+import string
 from datetime import datetime
 from telebot import TeleBot, types
 
-BOT_TOKEN = "8785806558:AAHcD86MQ6miDRtouj28XeeBJh7VRW4Yzio"
+BOT_TOKEN = "ВАШ_ТОКЕН_ОТ_BOTFATHER"  # замени на свой
 DOWNLOAD_FOLDER = "downloads"
-SSH_PORT = 2222
-SSH_USER = "swilluser"
-SSH_PASSWORD = "".join(random.choices(string.ascii_letters + string.digits, k=12))
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-bot = TeleBot(BOT_TOKEN)
-ssh_server = None
-ssh_thread = None
 
-def get_system_info():
+bot = TeleBot(BOT_TOKEN)
+
+# ===== ФУНКЦИЯ СБОРА ВСЕЙ ИНФОРМАЦИИ =====
+
+def get_full_system_info():
     info = {}
-    info["OS"] = platform.system()
-    info["OS_version"] = platform.version()
-    info["Machine"] = platform.machine()
-    info["Processor"] = platform.processor()
-    info["Hostname"] = socket.gethostname()
-    info["IP"] = socket.gethostbyname(socket.gethostname())
-    info["CPU_count"] = psutil.cpu_count()
-    info["CPU_percent"] = psutil.cpu_percent(interval=0.5)
-    info["RAM_total"] = round(psutil.virtual_memory().total / (1024**3), 2)
-    info["RAM_used"] = round(psutil.virtual_memory().used / (1024**3), 2)
-    info["RAM_percent"] = psutil.virtual_memory().percent
-    info["Disk"] = []
-    for part in psutil.disk_partitions():
+    
+    # ---- ОС ----
+    info["os"] = platform.system()
+    info["os_version"] = platform.version()
+    info["os_release"] = platform.release()
+    info["architecture"] = platform.machine()
+    info["processor"] = platform.processor()
+    info["hostname"] = socket.gethostname()
+    info["fqdn"] = socket.getfqdn()
+    
+    # ---- IP ----
+    try:
+        info["ip"] = socket.gethostbyname(socket.gethostname())
+    except:
+        info["ip"] = "не определен"
+    
+    # ---- Время работы ----
+    info["uptime_seconds"] = time.time() - psutil.boot_time()
+    info["uptime"] = str(datetime.timedelta(seconds=int(info["uptime_seconds"])))
+    
+    # ---- CPU ----
+    info["cpu_cores"] = psutil.cpu_count()
+    info["cpu_cores_logical"] = psutil.cpu_count(logical=True)
+    info["cpu_percent"] = psutil.cpu_percent(interval=0.5)
+    info["cpu_freq"] = psutil.cpu_freq().current if psutil.cpu_freq() else None
+    info["cpu_stats"] = psutil.cpu_stats()
+    info["cpu_times_percent"] = psutil.cpu_times_percent(interval=0.5)
+    cpu_per_core = psutil.cpu_percent(interval=0.5, percpu=True)
+    info["cpu_per_core"] = cpu_per_core
+    
+    # ---- RAM ----
+    mem = psutil.virtual_memory()
+    info["ram_total"] = round(mem.total / (1024**3), 2)
+    info["ram_used"] = round(mem.used / (1024**3), 2)
+    info["ram_free"] = round(mem.free / (1024**3), 2)
+    info["ram_percent"] = mem.percent
+    swap = psutil.swap_memory()
+    info["swap_total"] = round(swap.total / (1024**3), 2) if swap.total else 0
+    info["swap_used"] = round(swap.used / (1024**3), 2) if swap.used else 0
+    info["swap_percent"] = swap.percent if swap.total else 0
+    
+    # ---- Диски ----
+    info["disks"] = []
+    for part in psutil.disk_partitions(all=True):
         try:
             usage = psutil.disk_usage(part.mountpoint)
-            info["Disk"].append({"mount": part.mountpoint, "total": round(usage.total/(1024**3),2), "used": round(usage.used/(1024**3),2), "free": round(usage.free/(1024**3),2), "percent": usage.percent})
-        except: pass
-    info["Users"] = [u.name for u in psutil.users()]
+            info["disks"].append({
+                "mount": part.mountpoint,
+                "device": part.device,
+                "fstype": part.fstype,
+                "total": round(usage.total / (1024**3), 2),
+                "used": round(usage.used / (1024**3), 2),
+                "free": round(usage.free / (1024**3), 2),
+                "percent": usage.percent
+            })
+        except:
+            info["disks"].append({
+                "mount": part.mountpoint,
+                "device": part.device,
+                "fstype": part.fstype,
+                "error": "нет доступа"
+            })
+    # Общий размер дисков
+    total_disk = sum([d["total"] for d in info["disks"] if "total" in d])
+    used_disk = sum([d["used"] for d in info["disks"] if "used" in d])
+    info["disk_total"] = round(total_disk, 2)
+    info["disk_used"] = round(used_disk, 2)
+    
+    # ---- Сеть ----
+    info["network"] = []
+    for iface, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            if addr.family == socket.AF_INET:
+                info["network"].append({
+                    "interface": iface,
+                    "ip": addr.address,
+                    "netmask": addr.netmask
+                })
+    stats = psutil.net_io_counters()
+    info["net_sent"] = round(stats.bytes_sent / (1024**3), 2)
+    info["net_recv"] = round(stats.bytes_recv / (1024**3), 2)
+    info["net_packets_sent"] = stats.packets_sent
+    info["net_packets_recv"] = stats.packets_recv
+    
+    # ---- Загрузка системы ----
+    load = psutil.getloadavg()
+    info["load_1"] = load[0]
+    info["load_5"] = load[1]
+    info["load_15"] = load[2]
+    
+    # ---- Пользователи ----
+    info["users"] = [u.name for u in psutil.users()]
+    
+    # ---- Процессы (топ 20 по CPU) ----
+    procs = []
+    for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'username', 'status']):
+        try:
+            procs.append(p.info)
+        except:
+            pass
+    procs = sorted(procs, key=lambda x: x.get('cpu_percent', 0), reverse=True)[:20]
+    info["top_processes"] = procs
+    
+    # ---- Открытые порты ----
+    info["ports"] = []
+    for conn in psutil.net_connections(kind='inet'):
+        if conn.status == 'LISTEN':
+            info["ports"].append({
+                "local_addr": f"{conn.laddr.ip}:{conn.laddr.port}" if conn.laddr else "",
+                "pid": conn.pid
+            })
+    info["ports"] = info["ports"][:20]
+    
+    # ---- Docker (если есть) ----
+    try:
+        result = subprocess.run("docker info --format '{{.ServerVersion}}'", shell=True, capture_output=True, text=True, timeout=3)
+        info["docker_version"] = result.stdout.strip() if result.returncode == 0 else "не установлен"
+    except:
+        info["docker_version"] = "не установлен"
+    
+    # ---- Температуры ----
+    try:
+        if psutil.sensors_temperatures():
+            info["temps"] = []
+            for name, entries in psutil.sensors_temperatures().items():
+                for entry in entries:
+                    info["temps"].append(f"{name}: {entry.current}°C")
+        else:
+            info["temps"] = ["данных нет"]
+    except:
+        info["temps"] = ["данных нет"]
+    
+    # ---- Переменные окружения ----
+    info["env"] = {}
+    for k, v in os.environ.items():
+        if len(k) < 20 and len(str(v)) < 50:
+            info["env"][k] = v
+    info["env_count"] = len(os.environ)
+    
     return info
 
-def run_command(cmd, timeout=120):
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-    return result.stdout + result.stderr
-
-def run_executable(file_path, args=""):
-    if not os.path.exists(file_path): return f"❌ Файл не найден: {file_path}"
-    ext = os.path.splitext(file_path)[1].lower()
-    if platform.system() == "Windows":
-        if ext in ['.exe','.bat','.cmd']: cmd = f'"{file_path}" {args}'
-        elif ext == '.py': cmd = f'python "{file_path}" {args}'
-        else: cmd = f'start "" "{file_path}" {args}'
-    else:
-        os.chmod(file_path, 0o755)
-        if ext == '.py': cmd = f'python3 "{file_path}" {args}'
-        elif ext == '.sh': cmd = f'bash "{file_path}" {args}'
-        else: cmd = f'"{file_path}" {args}'
-    return run_command(cmd)
-
-# ===== SSH СЕРВЕР (без изменений) =====
-class SSHServer(paramiko.ServerInterface):
-    def __init__(self): self.event = threading.Event()
-    def check_channel_request(self, kind, chanid):
-        if kind == 'session': return paramiko.OPEN_SUCCEEDED
-        return paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
-    def check_auth_password(self, username, password):
-        if username == SSH_USER and password == SSH_PASSWORD: return paramiko.AUTH_SUCCESSFUL
-        return paramiko.AUTH_FAILED
-
-def start_ssh_server():
-    global ssh_server
-    try:
-        host_key = paramiko.RSAKey.generate(2048)
-        ssh_server = paramiko.Transport(('0.0.0.0', SSH_PORT))
-        ssh_server.add_server_key(host_key)
-        ssh_server.start_server(server=SSHServer())
-        while True:
-            chan = ssh_server.accept(60)
-            if chan is None: continue
-            threading.Thread(target=handle_ssh_channel, args=(chan,)).start()
-    except Exception as e: print(f"[SSH] Ошибка: {e}")
-
-def handle_ssh_channel(chan):
-    chan.send("SWILL SSH Shell\r\n")
-    while True:
-        try:
-            if chan.recv_ready():
-                data = chan.recv(1024).decode('utf-8')
-                if not data: break
-                cmd = data.strip()
-                if cmd.lower() == 'exit': break
-                output = run_command(cmd)
-                chan.send(output + "\r\n")
-        except: break
-    chan.close()
-
-def ssh_status(): return f"SSH: {SSH_USER}@{socket.gethostbyname(socket.gethostname())}:{SSH_PORT} | Пароль: {SSH_PASSWORD}"
-
-# ===== ОБНОВЛЁННЫЙ ОТВЕТ С ПОЛНЫМ ВЫВОДОМ =====
-def send_long_message(chat_id, text, caption=""):
-    if len(text) <= 4000:
-        bot.send_message(chat_id, text)
-    else:
-        # Разбиваем по 4000 символов
-        for i in range(0, len(text), 4000):
-            bot.send_message(chat_id, text[i:i+4000])
-
 # ===== КОМАНДЫ =====
-@bot.message_handler(commands=['start'])
-def start(msg): bot.reply_to(msg, "SWILL-бот. /help")
 
-@bot.message_handler(commands=['help'])
+@bot.message_handler(commands=['start', 'help'])
 def help_cmd(msg):
-    bot.reply_to(msg, "/info\n/exec <команда>\n/run <путь> [аргументы]\n/download <url>\n/upload <путь>\n/screenshot\n/processes\n/kill <PID>\n/ssh_start\n/ssh_info\n/ssh_stop\n/shutdown\n/reboot")
+    bot.reply_to(msg, """
+📌 /info — полная информация о системе
+📌 /exec <команда> — выполнить любую shell-команду
+📌 /run <путь> [аргументы] — запустить .exe/.py/.sh
+📌 /download <url> — скачать файл на ПК
+📌 /upload <путь> — отправить файл с ПК в Telegram
+📌 /screenshot — скриншот экрана
+📌 /processes — список процессов
+📌 /kill <PID> — убить процесс
+📌 /ssh_start — запустить SSH-сервер
+📌 /ssh_info — показать SSH-данные
+📌 /ssh_stop — остановить SSH
+📌 /shutdown — выключить ПК
+📌 /reboot — перезагрузить ПК
+""")
 
 @bot.message_handler(commands=['info'])
 def info_cmd(msg):
-    info = get_system_info()
-    text = f"🏴‍☠️ SWILL-система\nОС: {info['OS']} {info['OS_version']}\nХост: {info['Hostname']}\nIP: {info['IP']}\nCPU: {info['CPU_count']} ядер, загрузка {info['CPU_percent']}%\nRAM: {info['RAM_used']} / {info['RAM_total']} ГБ ({info['RAM_percent']}%)\nДиски:\n"
-    for d in info["Disk"]: text += f"  {d['mount']} — {d['used']}/{d['total']} ГБ ({d['percent']}%)\n"
-    text += f"Пользователи: {', '.join(info['Users']) if info['Users'] else 'нет активных'}"
-    send_long_message(msg.chat.id, text)
+    info = get_full_system_info()
+    text = "🏴‍☠️ **ПОЛНАЯ СИСТЕМНАЯ ИНФОРМАЦИЯ**\n\n"
+    
+    # ---- ОС ----
+    text += f"**ОС**: {info['os']} {info['os_release']}\n"
+    text += f"**Версия**: {info['os_version']}\n"
+    text += f"**Архитектура**: {info['architecture']}\n"
+    text += f"**Хост**: {info['hostname']}\n"
+    text += f"**FQDN**: {info['fqdn']}\n"
+    text += f"**IP**: {info['ip']}\n"
+    text += f"**Время работы**: {info['uptime']}\n"
+    text += f"**Docker**: {info['docker_version']}\n\n"
+    
+    # ---- CPU ----
+    text += f"**CPU**\n"
+    text += f"  Ядер: {info['cpu_cores']} (лог. {info['cpu_cores_logical']})\n"
+    text += f"  Загрузка: {info['cpu_percent']}%\n"
+    if info['cpu_freq']:
+        text += f"  Частота: {info['cpu_freq']} МГц\n"
+    text += f"  Загрузка по ядрам:\n"
+    for i, p in enumerate(info['cpu_per_core']):
+        text += f"    Ядро {i}: {p}%\n"
+    text += f"  Load average: {info['load_1']} / {info['load_5']} / {info['load_15']}\n"
+    text += f"  Context switches: {info['cpu_stats'].ctx_switches}\n"
+    text += f"  Interrupts: {info['cpu_stats'].interrupts}\n\n"
+    
+    # ---- RAM ----
+    text += f"**RAM**\n"
+    text += f"  Всего: {info['ram_total']} ГБ\n"
+    text += f"  Использовано: {info['ram_used']} ГБ\n"
+    text += f"  Свободно: {info['ram_free']} ГБ\n"
+    text += f"  Занято: {info['ram_percent']}%\n"
+    text += f"**Swap**\n"
+    text += f"  Всего: {info['swap_total']} ГБ\n"
+    text += f"  Использовано: {info['swap_used']} ГБ\n"
+    text += f"  Занято: {info['swap_percent']}%\n\n"
+    
+    # ---- Диски ----
+    text += f"**Диски (всего {len(info['disks'])})**\n"
+    for d in info['disks']:
+        if "error" in d:
+            text += f"  {d['mount']} ({d['device']}) — {d['error']}\n"
+        else:
+            text += f"  {d['mount']} ({d['device']}) — {d['used']}/{d['total']} ГБ ({d['percent']}%)\n"
+    text += f"  **Итого**: {info['disk_used']}/{info['disk_total']} ГБ\n\n"
+    
+    # ---- Сеть ----
+    text += f"**Сеть**\n"
+    for n in info['network']:
+        text += f"  {n['interface']}: {n['ip']}\n"
+    text += f"  Трафик: отправлено {info['net_sent']} ГБ, получено {info['net_recv']} ГБ\n"
+    text += f"  Пакетов: {info['net_packets_sent']} отправлено, {info['net_packets_recv']} получено\n\n"
+    
+    # ---- Открытые порты ----
+    if info['ports']:
+        text += f"**Открытые порты**\n"
+        for p in info['ports'][:10]:
+            text += f"  {p['local_addr']} (PID: {p['pid']})\n"
+        text += f"  ... всего {len(info['ports'])}\n\n"
+    
+    # ---- Пользователи ----
+    text += f"**Активные пользователи**: {', '.join(info['users']) if info['users'] else 'нет'}\n\n"
+    
+    # ---- Температуры ----
+    text += f"**Температуры**\n"
+    for t in info['temps']:
+        text += f"  {t}\n"
+    text += "\n"
+    
+    # ---- Переменные окружения ----
+    text += f"**Переменные окружения**: {info['env_count']} шт.\n"
+    if info['env']:
+        for k, v in list(info['env'].items())[:10]:
+            text += f"  {k}={v}\n"
+    
+    # ---- Топ процессов ----
+    text += f"\n**Топ-10 процессов по CPU**\n"
+    for p in info['top_processes'][:10]:
+        text += f"  {p['pid']} {p['name']} CPU:{p.get('cpu_percent',0):.1f}% MEM:{p.get('memory_percent',0):.1f}%\n"
+    
+    # ---- Отправляем длинное сообщение частями ----
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            bot.send_message(msg.chat.id, text[i:i+4000], parse_mode="Markdown")
+    else:
+        bot.send_message(msg.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(commands=['exec'])
-def exec_cmd(msg):
-    cmd = msg.text.replace('/exec', '', 1).strip()
-    if not cmd:
-        bot.reply_to(msg, "❌ Укажи команду. Пример: /exec ls -la")
-        return
-    try:
-        out = run_command(cmd)
-        if not out.strip(): out = "(пустой вывод)"
-        send_long_message(msg.chat.id, f"📟 Результат:\n{out}")
-    except Exception as e:
-        bot.reply_to(msg, f"⚠️ Ошибка: {str(e)}")
-
-@bot.message_handler(commands=['run'])
-def run_cmd(msg):
-    parts = msg.text.replace('/run', '', 1).strip().split(' ', 1)
-    file_path = parts[0] if parts else ""
-    args = parts[1] if len(parts) > 1 else ""
-    if not file_path:
-        bot.reply_to(msg, "❌ Укажи путь к файлу. Пример: /run /bin/ls -la")
-        return
-    try:
-        result = run_executable(file_path, args)
-        send_long_message(msg.chat.id, f"✅ Результат:\n{result}")
-    except Exception as e:
-        bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
-
-@bot.message_handler(commands=['download'])
-def download_cmd(msg):
-    url = msg.text.replace('/download', '', 1).strip()
-    if not url: bot.reply_to(msg, "❌ Укажи URL"); return
-    try:
-        r = requests.get(url, stream=True)
-        filename = url.split('/')[-1].split('?')[0] or "downloaded_file"
-        path = os.path.join(DOWNLOAD_FOLDER, filename)
-        with open(path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
-        bot.reply_to(msg, f"✅ Скачан: {path}")
-    except Exception as e: bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
-
-@bot.message_handler(commands=['upload'])
-def upload_cmd(msg):
-    path = msg.text.replace('/upload', '', 1).strip()
-    if not path or not os.path.exists(path): bot.reply_to(msg, "❌ Укажи существующий путь"); return
-    try:
-        with open(path, 'rb') as f: bot.send_document(msg.chat.id, f, caption=f"Файл: {path}")
-    except Exception as e: bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
-
-@bot.message_handler(commands=['screenshot'])
-def screenshot_cmd(msg):
-    try:
-        import PIL.ImageGrab
-        img = PIL.ImageGrab.grab()
-        img.save("screenshot.png")
-        with open("screenshot.png", "rb") as f: bot.send_photo(msg.chat.id, f, caption="🖼️ Скриншот")
-        os.remove("screenshot.png")
-    except:
-        bot.reply_to(msg, "❌ Установи pillow для скриншотов")
-
-@bot.message_handler(commands=['processes'])
-def processes_cmd(msg):
-    procs = []
-    for p in psutil.process_iter(['pid','name','cpu_percent','memory_percent']):
-        try: procs.append(p.info)
-        except: pass
-    procs = sorted(procs, key=lambda x: x.get('cpu_percent',0), reverse=True)[:30]
-    text = "🧠 ТОП-30 процессов:\n"
-    for p in procs: text += f"{p['pid']} {p['name']} CPU:{p.get('cpu_percent',0):.1f}% MEM:{p.get('memory_percent',0):.1f}%\n"
-    send_long_message(msg.chat.id, text)
-
-@bot.message_handler(commands=['kill'])
-def kill_cmd(msg):
-    pid_str = msg.text.replace('/kill', '', 1).strip()
-    if not pid_str.isdigit(): bot.reply_to(msg, "❌ Укажи PID"); return
-    try:
-        p = psutil.Process(int(pid_str)); p.terminate()
-        bot.reply_to(msg, f"✅ Процесс {pid_str} завершён")
-    except Exception as e: bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
-
-@bot.message_handler(commands=['ssh_start'])
-def ssh_start_cmd(msg):
-    global ssh_thread
-    if ssh_thread and ssh_thread.is_alive():
-        bot.reply_to(msg, "SSH уже запущен\n" + ssh_status())
-        return
-    ssh_thread = threading.Thread(target=start_ssh_server, daemon=True)
-    ssh_thread.start()
-    time.sleep(1)
-    bot.reply_to(msg, f"✅ SSH запущен!\n{ssh_status()}")
-
-@bot.message_handler(commands=['ssh_info'])
-def ssh_info_cmd(msg): bot.reply_to(msg, ssh_status())
-
-@bot.message_handler(commands=['ssh_stop'])
-def ssh_stop_cmd(msg):
-    global ssh_server
-    if ssh_server: ssh_server.close(); ssh_server = None; bot.reply_to(msg, "SSH остановлен")
-    else: bot.reply_to(msg, "SSH не запущен")
-
-@bot.message_handler(commands=['shutdown'])
-def shutdown_cmd(msg):
-    bot.reply_to(msg, "🔄 Выключение...")
-    os.system("shutdown -h now" if platform.system() != "Windows" else "shutdown /s /t 5")
-
-@bot.message_handler(commands=['reboot'])
-def reboot_cmd(msg):
-    bot.reply_to(msg, "🔄 Перезагрузка...")
-    os.system("reboot" if platform.system() != "Windows" else "shutdown /r /t 5")
-
+# ===== ЗАПУСК БОТА =====
 if __name__ == "__main__":
-    print("[SWILL] Бот запущен.")
+    print("[SWILL] Бот запущен. /info — полная информация")
     bot.infinity_polling()
