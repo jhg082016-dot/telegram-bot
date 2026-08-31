@@ -15,7 +15,10 @@ import string
 from datetime import datetime
 from telebot import TeleBot, types
 
-BOT_TOKEN = "8785806558:AAHcD86MQ6miDRtouj28XeeBJh7VRW4Yzio"  # замени на свой
+     BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+     if not BOT_TOKEN:
+         print("Ошибка: TELEGRAM_BOT_TOKEN не задан!")
+         exit(1)
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
