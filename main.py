@@ -14,21 +14,33 @@ import random
 import string
 from datetime import datetime
 from telebot import TeleBot, types
+from functools import wraps
 
 # ===== ТОКЕН ИЗ ПЕРЕМЕННОЙ ОКРУЖЕНИЯ =====
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not BOT_TOKEN:
     print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не задан!")
-    print("Установи переменную окружения TELEGRAM_BOT_TOKEN")
     sys.exit(1)
+
+# ===== ТВОЙ TELEGRAM ID (ТОЛЬКО ТЫ МОЖЕШЬ ПИСАТЬ) =====
+ALLOWED_USER_ID = 1430065211
 
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 bot = TeleBot(BOT_TOKEN)
 
-# ===== ФУНКЦИИ =====
+# ===== ДЕКОРАТОР ЗАЩИТЫ =====
+def restricted(func):
+    @wraps(func)
+    def wrapper(msg, *args, **kwargs):
+        if msg.from_user.id != ALLOWED_USER_ID:
+            bot.reply_to(msg, "⛔ Доступ запрещён.")
+            return
+        return func(msg, *args, **kwargs)
+    return wrapper
 
+# ===== ФУНКЦИИ =====
 def run_command(cmd, timeout=60):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
     return result.stdout + result.stderr
@@ -43,6 +55,7 @@ def send_long_message(chat_id, text):
 # ===== КОМАНДЫ БОТА =====
 
 @bot.message_handler(commands=['start', 'help'])
+@restricted
 def help_cmd(msg):
     bot.reply_to(msg, """
 📌 /info — информация о системе
@@ -58,6 +71,7 @@ def help_cmd(msg):
 """)
 
 @bot.message_handler(commands=['info'])
+@restricted
 def info_cmd(msg):
     info = {}
     info["OS"] = platform.system()
@@ -88,7 +102,7 @@ def info_cmd(msg):
         except:
             pass
     info["Users"] = [u.name for u in psutil.users()]
-    
+
     text = f"🏴‍☠️ SWILL-система\n"
     text += f"ОС: {info['OS']} {info['OS_version']}\n"
     text += f"Хост: {info['Hostname']}\n"
@@ -99,10 +113,11 @@ def info_cmd(msg):
     for d in info["Disk"]:
         text += f"  {d['mount']} — {d['used']}/{d['total']} ГБ ({d['percent']}%)\n"
     text += f"Пользователи: {', '.join(info['Users']) if info['Users'] else 'нет активных'}"
-    
+
     send_long_message(msg.chat.id, text)
 
 @bot.message_handler(commands=['exec'])
+@restricted
 def exec_cmd(msg):
     cmd = msg.text.replace('/exec', '', 1).strip()
     if not cmd:
@@ -117,6 +132,7 @@ def exec_cmd(msg):
         bot.reply_to(msg, f"⚠️ Ошибка: {str(e)}")
 
 @bot.message_handler(commands=['run'])
+@restricted
 def run_cmd(msg):
     parts = msg.text.replace('/run', '', 1).strip().split(' ', 1)
     file_path = parts[0] if parts else ""
@@ -137,6 +153,7 @@ def run_cmd(msg):
         bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
 
 @bot.message_handler(commands=['download'])
+@restricted
 def download_cmd(msg):
     url = msg.text.replace('/download', '', 1).strip()
     if not url:
@@ -154,6 +171,7 @@ def download_cmd(msg):
         bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
 
 @bot.message_handler(commands=['upload'])
+@restricted
 def upload_cmd(msg):
     path = msg.text.replace('/upload', '', 1).strip()
     if not path or not os.path.exists(path):
@@ -166,6 +184,7 @@ def upload_cmd(msg):
         bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
 
 @bot.message_handler(commands=['screenshot'])
+@restricted
 def screenshot_cmd(msg):
     try:
         import PIL.ImageGrab
@@ -178,6 +197,7 @@ def screenshot_cmd(msg):
         bot.reply_to(msg, "❌ Установи pillow для скриншотов")
 
 @bot.message_handler(commands=['processes'])
+@restricted
 def processes_cmd(msg):
     procs = []
     for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
@@ -192,6 +212,7 @@ def processes_cmd(msg):
     send_long_message(msg.chat.id, text)
 
 @bot.message_handler(commands=['kill'])
+@restricted
 def kill_cmd(msg):
     pid_str = msg.text.replace('/kill', '', 1).strip()
     if not pid_str.isdigit():
@@ -205,6 +226,7 @@ def kill_cmd(msg):
         bot.reply_to(msg, f"❌ Ошибка: {str(e)}")
 
 @bot.message_handler(commands=['shutdown'])
+@restricted
 def shutdown_cmd(msg):
     bot.reply_to(msg, "🔄 Выключение...")
     if platform.system() == "Windows":
@@ -213,6 +235,7 @@ def shutdown_cmd(msg):
         os.system("shutdown -h now")
 
 @bot.message_handler(commands=['reboot'])
+@restricted
 def reboot_cmd(msg):
     bot.reply_to(msg, "🔄 Перезагрузка...")
     if platform.system() == "Windows":
