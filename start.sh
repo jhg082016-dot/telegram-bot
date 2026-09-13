@@ -8,7 +8,8 @@ cat > /app/gemini_keys.json << EOF
 {
   "keys": [
     "${GEMINI_KEY_1}",
-    "${GEMINI_KEY_2}"
+    "${GEMINI_KEY_2}",
+    "${GEMINI_KEY_3}"
   ],
   "current": 0
 }
