@@ -2,7 +2,7 @@
 
 echo "=== [START] Автозапуск ==="
 
-mkdir -p /app/exports /app/imports /app/tmp_files /app/backups
+mkdir -p /app/data /app/exports /app/imports /app/tmp_files /app/data/backups
 
 cat > /app/gemini_keys.json << EOF
 {
