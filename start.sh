@@ -50,4 +50,22 @@ echo "✅ backup_and_notify.py запущен"
 nohup python3 /app/main.py > /app/main.log 2>&1 &
 echo "✅ main.py запущен"
 
+sleep 5
+
+echo "--- ЖИВЫЕ ПРОЦЕССЫ ---"
+ps aux | grep python3 | grep -v grep
+echo "--- КОНЕЦ ПРОЦЕССОВ ---"
+
+echo "--- ЛОГ AI_BOT (последние 20 строк) ---"
+tail -20 /app/ai_bot.log
+echo "--- КОНЕЦ ЛОГА AI_BOT ---"
+
+echo "--- ЛОГ MAIN (последние 20 строк) ---"
+tail -20 /app/main.log
+echo "--- КОНЕЦ ЛОГА MAIN ---"
+
+echo "--- ЛОГ BACKUP (последние 20 строк) ---"
+tail -20 /app/backup.log
+echo "--- КОНЕЦ ЛОГА BACKUP ---"
+
 echo "=== [START] Готово ==="
