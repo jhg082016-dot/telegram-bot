@@ -22,9 +22,13 @@ pkill -9 -f backup_and_notify.py 2>/dev/null
 pkill -9 -f main.py 2>/dev/null
 sleep 2
 
-# Запускаем backup в фоне (он просто спит и раз в сутки делает бэкап)
+# Запускаем backup в фоне (он спит и раз в сутки делает бэкап)
 nohup python3 -u /app/backup_and_notify.py > /app/backup.log 2>&1 &
 echo "✅ backup_and_notify.py запущен"
+
+# Запускаем main.py в фоне (SWILL-бот для группы)
+nohup python3 -u /app/main.py > /app/main.log 2>&1 &
+echo "✅ main.py запущен"
 
 # Запускаем AI-бота НАПРЯМУЮ — все логи идут в Railway
 echo "--- ЗАПУСК AI_BOT ---"
