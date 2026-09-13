@@ -2,10 +2,8 @@
 
 echo "=== [START] Автозапуск ==="
 
-# Папки создаем (на всякий случай, но Dockerfile их тоже создаст)
 mkdir -p /app/exports /app/imports /app/tmp_files /app/backups
 
-# Создаем файл с ключами из переменных окружения
 cat > /app/gemini_keys.json << EOF
 {
   "keys": [
@@ -18,18 +16,22 @@ EOF
 
 echo "${EXA_KEY}" > /app/exa_key.txt
 
-# Убиваем старые процессы (если остались)
 pkill -9 -f ai_bot.py 2>/dev/null
 pkill -9 -f backup_and_notify.py 2>/dev/null
 pkill -9 -f main.py 2>/dev/null
 sleep 2
 
-# Запускаем ботов в фоне
+# ЗАПУСКАЕМ AI_BOT НЕ В ФОНЕ, А НАПРЯМУЮ — ЧТОБЫ ВИДЕТЬ ОШИБКУ
+echo "--- ПРОВЕРКА AI_BOT ---"
+python3 /app/ai_bot.py 2>&1 | head -50 &
+AI_PID=$!
+sleep 10
+kill $AI_PID 2>/dev/null
+echo "--- КОНЕЦ ПРОВЕРКИ ---"
+
+# Теперь запускаем в фоне как обычно
 nohup python3 /app/ai_bot.py > /app/ai_bot.log 2>&1 &
-sleep 2
-echo "--- ЛОГ AI_BOT ---"
-cat /app/ai_bot.log
-echo "--- КОНЕЦ ЛОГА ---"
+echo "✅ ai_bot.py запущен"
 
 nohup python3 /app/backup_and_notify.py > /app/backup.log 2>&1 &
 echo "✅ backup_and_notify.py запущен"
