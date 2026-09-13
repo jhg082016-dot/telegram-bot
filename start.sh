@@ -31,6 +31,10 @@ echo "✅ backup_and_notify.py запущен"
 nohup python3 -u /app/main.py > /app/main.log 2>&1 &
 echo "✅ main.py запущен"
 
+# Запускаем таймер бэкапа
+nohup python3 -u /app/timer_backup.py > /app/timer.log 2>&1 &
+echo "✅ timer_backup.py запущен"
+
 # Запускаем AI-бота НАПРЯМУЮ — все логи идут в Railway
 echo "--- ЗАПУСК AI_BOT ---"
 python3 -u /app/ai_bot.py
