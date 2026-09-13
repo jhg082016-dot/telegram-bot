@@ -26,7 +26,10 @@ sleep 2
 
 # Запускаем ботов в фоне
 nohup python3 /app/ai_bot.py > /app/ai_bot.log 2>&1 &
-echo "✅ ai_bot.py запущен"
+sleep 2
+echo "--- ЛОГ AI_BOT ---"
+cat /app/ai_bot.log
+echo "--- КОНЕЦ ЛОГА ---"
 
 nohup python3 /app/backup_and_notify.py > /app/backup.log 2>&1 &
 echo "✅ backup_and_notify.py запущен"
