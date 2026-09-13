@@ -15,7 +15,7 @@ from functools import wraps
 TELEGRAM_TOKEN = os.getenv("AI_BOT_TOKEN")
 KEYS_FILE = "/app/gemini_keys.json"
 EXA_KEY_FILE = "/app/exa_key.txt"
-DB_PATH = "/app/chats.db"
+DB_PATH = "/app/data/chats.db"
 EXPORT_DIR = "/app/exports"
 IMPORT_DIR = "/app/imports"
 TMP_DIR = "/app/tmp_files"
