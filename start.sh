@@ -37,10 +37,13 @@ echo "✅ main.py запущен"
 
 echo "=== [START] Готово ==="
 
-# ===== ЖДЁМ И ОТПРАВЛЯЕМ ЛОГИ В TELEGRAM =====
-sleep 15
+sleep 20
 
 CHAT_ID="1430065211"
+
+# Проверка Telegram API (главный бот)
+GETME_MAIN=$(curl -s "https://api.telegram.org/bot${MAIN_BOT_TOKEN}/getMe")
+GETME_AI=$(curl -s "https://api.telegram.org/bot${AI_BOT_TOKEN}/getMe")
 
 # Список процессов
 PROCS=$(ps aux 2>/dev/null | grep -E "ai_bot|main.py|backup_and_notify" | grep -v grep)
@@ -50,20 +53,24 @@ AI_LOG=$(tail -40 /app/ai_bot.log 2>/dev/null || echo "лог пуст")
 MAIN_LOG=$(tail -40 /app/main.log 2>/dev/null || echo "лог пуст")
 BACKUP_LOG=$(tail -40 /app/backup.log 2>/dev/null || echo "лог пуст")
 
-# Отправка в Telegram
 curl -s -X POST "https://api.telegram.org/bot${MAIN_BOT_TOKEN}/sendMessage" \
   -d chat_id="${CHAT_ID}" \
-  -d text="=== ПРОЦЕССЫ ===
-${PROCS}
+  -d text="=== GET_ME MAIN ===
+${GETME_MAIN}
 
-=== AI_BOT.LOG ===
-${AI_LOG}"
+=== GET_ME AI ===
+${GETME_AI}
+
+=== ПРОЦЕССЫ ===
+${PROCS}"
 
 curl -s -X POST "https://api.telegram.org/bot${MAIN_BOT_TOKEN}/sendMessage" \
   -d chat_id="${CHAT_ID}" \
-  -d text="=== MAIN.LOG ===
+  -d text="=== AI_BOT.LOG ===
+${AI_LOG}
+
+=== MAIN.LOG ===
 ${MAIN_LOG}
 
 === BACKUP.LOG ===
 ${BACKUP_LOG}"
-echo "=== [START] Готово ==="
