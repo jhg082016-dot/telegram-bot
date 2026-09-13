@@ -8,7 +8,7 @@ from datetime import datetime
 # ===== КОНФИГ =====
 BOT_TOKEN = os.getenv("MAIN_BOT_TOKEN")   # основной бот
 GROUP_CHAT_ID = "-1004332423937"                            # сюда впишешь ID
-DB_PATH = "/app/chats.db"
+DB_PATH = "/app/data/chats.db"
 BACKUP_DIR = "/app/backups"
 KEYS_FILE = "/app/gemini_keys.json"
 
