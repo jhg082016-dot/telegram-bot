@@ -16,20 +16,31 @@ EOF
 
 echo "${EXA_KEY}" > /app/exa_key.txt
 
+echo "--- СПИСОК ФАЙЛОВ В /app ---"
+ls -la /app/
+echo "--- КОНЕЦ СПИСКА ---"
+
+echo "--- ПРОВЕРКА СИНТАКСИСА ---"
+python3 -m py_compile /app/ai_bot.py && echo "ai_bot.py OK" || echo "ai_bot.py СЛОМАН"
+python3 -m py_compile /app/auto_features.py && echo "auto_features.py OK" || echo "auto_features.py СЛОМАН"
+echo "--- КОНЕЦ ПРОВЕРКИ ---"
+
+echo "--- ПРОВЕРКА ИМПОРТОВ ---"
+python3 -c "import telebot; print('telebot OK')" 2>&1
+python3 -c "import matplotlib; print('matplotlib OK')" 2>&1
+python3 -c "import pypdf; print('pypdf OK')" 2>&1
+python3 -c "import pdf2image; print('pdf2image OK')" 2>&1
+python3 -c "import docx; print('docx OK')" 2>&1
+python3 -c "import img2pdf; print('img2pdf OK')" 2>&1
+python3 -c "import yt_dlp; print('yt_dlp OK')" 2>&1
+python3 -c "import pyflakes; print('pyflakes OK')" 2>&1
+echo "--- КОНЕЦ ПРОВЕРКИ ---"
+
 pkill -9 -f ai_bot.py 2>/dev/null
 pkill -9 -f backup_and_notify.py 2>/dev/null
 pkill -9 -f main.py 2>/dev/null
 sleep 2
 
-# ЗАПУСКАЕМ AI_BOT НЕ В ФОНЕ, А НАПРЯМУЮ — ЧТОБЫ ВИДЕТЬ ОШИБКУ
-echo "--- ПРОВЕРКА AI_BOT ---"
-python3 /app/ai_bot.py 2>&1 | head -50 &
-AI_PID=$!
-sleep 10
-kill $AI_PID 2>/dev/null
-echo "--- КОНЕЦ ПРОВЕРКИ ---"
-
-# Теперь запускаем в фоне как обычно
 nohup python3 /app/ai_bot.py > /app/ai_bot.log 2>&1 &
 echo "✅ ai_bot.py запущен"
 
